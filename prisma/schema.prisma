@@ -1,0 +1,729 @@
+// CAMI OP — Church Information Management System
+// Prisma schema modeling the full PRD (all phases). See docs/DATABASE.md.
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------------
+// 1. Organization & Branch Setup
+// ---------------------------------------------------------------------------
+
+model Branch {
+  id              String   @id @default(cuid())
+  name            String
+  code            String   @unique
+  address         String?
+  city            String?
+  state           String?
+  country         String?
+  contactPhone    String?
+  contactEmail    String?
+  serviceSchedule String?
+  status          BranchStatus @default(ACTIVE)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  users          User[]
+  ministries     Ministry[]
+  members        Member[]
+  households     Household[]
+  services       Service[]
+  givingRecords  GivingRecord[]
+  expenseRecords ExpenseRecord[]
+  budgets        Budget[]
+  requests       Request[]
+  documents      Document[]        @relation("DocumentTargetBranch")
+  assets         Asset[]
+  tasks          Task[]            @relation("TaskTargetBranch")
+  announcements  Announcement[]    @relation("AnnouncementTargetBranch")
+  appointments   Appointment[]
+  preachingAssignments PreachingAssignment[]
+
+  @@index([status])
+}
+
+enum BranchStatus {
+  ACTIVE
+  INACTIVE
+  PENDING
+}
+
+model Ministry {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  branchId    String?  // null = Headquarters-level ministry/department
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+  leaderId    String?
+  leader      User?    @relation("MinistryLeader", fields: [leaderId], references: [id])
+  createdAt   DateTime @default(now())
+
+  users               User[]               @relation("MinistryMembers")
+  ministryInvolvements MinistryInvolvement[]
+  tasks               Task[]               @relation("TaskTargetMinistry")
+  documents           Document[]           @relation("DocumentTargetMinistry")
+
+  @@index([branchId])
+}
+
+// ---------------------------------------------------------------------------
+// 2. Identity, Users & Roles
+// ---------------------------------------------------------------------------
+
+enum Role {
+  GENERAL_OVERSEER   // church-wide, sees all branches + church-wide equipment valuation
+  HQ_ADMIN
+  HQ_FINANCE
+  BRANCH_PASTOR      // sees own-branch equipment valuation (Section 3.3)
+  BRANCH_ADMIN
+  FINANCE_OFFICER
+  MINISTRY_LEADER
+  WORKER
+  MEMBER
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  phone         String?
+  passwordHash  String
+  fullName      String
+  role          Role
+  branchId      String?   // null for HQ-scoped roles (GENERAL_OVERSEER, HQ_ADMIN, HQ_FINANCE)
+  branch        Branch?   @relation(fields: [branchId], references: [id])
+  isActive      Boolean   @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  ministries          Ministry[]            @relation("MinistryMembers")
+  leadsMinistries     Ministry[]            @relation("MinistryLeader")
+  memberProfile       Member?
+  pastorProfile       PastorProfile?
+  ministryInvolvements MinistryInvolvement[]
+
+  recordedGiving      GivingRecord[]        @relation("GivingRecordedBy")
+  recordedExpenses    ExpenseRecord[]       @relation("ExpenseRecordedBy")
+  approvedExpenses    ExpenseRecord[]       @relation("ExpenseApprovedBy")
+
+  requestsCreated     Request[]             @relation("RequestCreatedBy")
+  approvalActions     ApprovalAction[]      @relation("ApprovalActor")
+
+  documentsUploaded   Document[]            @relation("DocumentUploadedBy")
+  acknowledgements    Acknowledgement[]
+
+  custodianOfAssets   Asset[]               @relation("AssetCustodian")
+
+  tasksCreated        Task[]                @relation("TaskCreatedBy")
+  tasksAssigned       Task[]                @relation("TaskAssignedTo")
+
+  announcementsCreated Announcement[]       @relation("AnnouncementCreatedBy")
+  notifications       Notification[]
+  sentMessages        Message[]             @relation("MessageSender")
+
+  preachingAssignments PreachingAssignment[] @relation("PreachingPastor")
+
+  auditLogs           AuditLog[]
+
+  @@index([role])
+  @@index([branchId])
+}
+
+// ---------------------------------------------------------------------------
+// 3. People & Membership
+// ---------------------------------------------------------------------------
+
+model Household {
+  id        String   @id @default(cuid())
+  name      String
+  branchId  String
+  branch    Branch   @relation(fields: [branchId], references: [id])
+  members   Member[]
+  createdAt DateTime @default(now())
+}
+
+enum MembershipStatus {
+  ACTIVE
+  INACTIVE
+  TRANSFERRED
+  DECEASED
+}
+
+model Member {
+  id                    String   @id @default(cuid())
+  userId                String?  @unique // set if the member also has a login account
+  user                  User?    @relation(fields: [userId], references: [id])
+  branchId              String
+  branch                Branch   @relation(fields: [branchId], references: [id])
+  firstName             String
+  lastName              String
+  phone                 String?
+  email                 String?
+  dateOfBirth           DateTime?
+  gender                String?
+  occupation            String?
+  address               String?
+  householdId           String?
+  household             Household? @relation(fields: [householdId], references: [id])
+  membershipStatus      MembershipStatus @default(ACTIVE)
+  joinedAt              DateTime?
+  baptismDate           DateTime?
+  foundationClassDone   Boolean  @default(false)
+  notes                 String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  ministryInvolvements  MinistryInvolvement[]
+  attendanceRecords     AttendanceRecord[]
+  followUps             FollowUpRecord[]
+  smsRecipients         SmsRecipient[]
+
+  @@index([branchId])
+  @@index([membershipStatus])
+  @@index([dateOfBirth])
+}
+
+model MinistryInvolvement {
+  id         String   @id @default(cuid())
+  memberId   String?
+  member     Member?  @relation(fields: [memberId], references: [id])
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  ministryId String
+  ministry   Ministry @relation(fields: [ministryId], references: [id])
+  roleTitle  String?
+  joinedAt   DateTime @default(now())
+
+  @@index([ministryId])
+}
+
+model FollowUpRecord {
+  id           String   @id @default(cuid())
+  memberId     String
+  member       Member   @relation(fields: [memberId], references: [id])
+  note         String
+  status       String   @default("OPEN") // OPEN, IN_PROGRESS, CLOSED
+  assignedToId String?
+  dueDate      DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([memberId])
+}
+
+// ---------------------------------------------------------------------------
+// 4. Pastoral & Leadership Management
+// ---------------------------------------------------------------------------
+
+model PastorProfile {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id])
+  ordinationDate   DateTime?
+  qualifications   String?
+  bio              String?
+  createdAt        DateTime @default(now())
+}
+
+enum AppointmentType {
+  POSTING
+  PROMOTION
+  TRAINING
+  APPOINTMENT
+}
+
+model Appointment {
+  id          String          @id @default(cuid())
+  userId      String
+  branchId    String?
+  branch      Branch?         @relation(fields: [branchId], references: [id])
+  positionTitle String
+  type        AppointmentType
+  startDate   DateTime
+  endDate     DateTime?
+  notes       String?
+  createdAt   DateTime        @default(now())
+
+  @@index([userId])
+  @@index([branchId])
+}
+
+enum PreachingStatus {
+  SCHEDULED
+  NOTIFIED
+  COMPLETED
+  CANCELLED
+}
+
+model PreachingAssignment {
+  id         String          @id @default(cuid())
+  pastorId   String
+  pastor     User            @relation("PreachingPastor", fields: [pastorId], references: [id])
+  branchId   String
+  branch     Branch          @relation(fields: [branchId], references: [id])
+  date       DateTime
+  eventOrService String?
+  status     PreachingStatus @default(SCHEDULED)
+  notifiedAt DateTime?
+  createdAt  DateTime        @default(now())
+
+  @@index([branchId, date])
+}
+
+// ---------------------------------------------------------------------------
+// 5. Finance & Giving
+// ---------------------------------------------------------------------------
+
+model Service {
+  id              String   @id @default(cuid())
+  branchId        String
+  branch          Branch   @relation(fields: [branchId], references: [id])
+  date            DateTime
+  type            String   // e.g. Sunday Service, Midweek, Special
+  totalAttendance Int?
+  createdAt       DateTime @default(now())
+
+  attendanceRecords AttendanceRecord[]
+  givingRecords     GivingRecord[]
+
+  @@index([branchId, date])
+}
+
+model AttendanceRecord {
+  id        String   @id @default(cuid())
+  serviceId String
+  service   Service  @relation(fields: [serviceId], references: [id])
+  memberId  String
+  member    Member   @relation(fields: [memberId], references: [id])
+  present   Boolean  @default(true)
+
+  @@unique([serviceId, memberId])
+  @@index([memberId])
+}
+
+model GivingCategory {
+  id     String @id @default(cuid())
+  name   String @unique // Offering, Tithe, Pastors' Seed, Suya Seed, Pastors' Birthday Giving, Father's Day Giving, ...
+  code   String @unique
+  active Boolean @default(true)
+
+  givingRecords GivingRecord[]
+  budgets       Budget[]
+}
+
+model GivingRecord {
+  id           String         @id @default(cuid())
+  branchId     String
+  branch       Branch         @relation(fields: [branchId], references: [id])
+  serviceId    String?
+  service      Service?       @relation(fields: [serviceId], references: [id])
+  categoryId   String
+  category     GivingCategory @relation(fields: [categoryId], references: [id])
+  amount       Decimal        @db.Decimal(14, 2)
+  currency     String         @default("NGN")
+  notes        String?
+  recordedById String
+  recordedBy   User           @relation("GivingRecordedBy", fields: [recordedById], references: [id])
+  createdAt    DateTime       @default(now())
+
+  @@index([branchId, categoryId])
+  @@index([createdAt])
+}
+
+enum ExpenseStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+model ExpenseRecord {
+  id             String        @id @default(cuid())
+  branchId       String
+  branch         Branch        @relation(fields: [branchId], references: [id])
+  category       String
+  amount         Decimal       @db.Decimal(14, 2)
+  currency       String        @default("NGN")
+  description    String?
+  supportingDocUrl String?
+  status         ExpenseStatus @default(SUBMITTED)
+  recordedById   String
+  recordedBy     User          @relation("ExpenseRecordedBy", fields: [recordedById], references: [id])
+  approvedById   String?
+  approvedBy     User?         @relation("ExpenseApprovedBy", fields: [approvedById], references: [id])
+  createdAt      DateTime      @default(now())
+
+  @@index([branchId, status])
+}
+
+model Budget {
+  id           String         @id @default(cuid())
+  branchId     String
+  branch       Branch         @relation(fields: [branchId], references: [id])
+  categoryId   String?
+  category     GivingCategory? @relation(fields: [categoryId], references: [id])
+  label        String
+  period       String   // e.g. "2026-01" monthly, or "2026" yearly
+  plannedAmount Decimal @db.Decimal(14, 2)
+  createdAt    DateTime @default(now())
+
+  @@index([branchId, period])
+}
+
+// ---------------------------------------------------------------------------
+// 6. Requests & Approval Workflow
+// ---------------------------------------------------------------------------
+
+enum RequestType {
+  FUNDS
+  SUPPLIES
+  STAFFING
+  EVENT
+  REPAIR
+  OTHER
+}
+
+enum RequestStatus {
+  SUBMITTED
+  VERIFICATION
+  HQ_REVIEW
+  APPROVED
+  REJECTED
+  DISBURSED
+}
+
+enum RequestPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+model Request {
+  id            String          @id @default(cuid())
+  branchId      String
+  branch        Branch          @relation(fields: [branchId], references: [id])
+  createdById   String
+  createdBy     User            @relation("RequestCreatedBy", fields: [createdById], references: [id])
+  type          RequestType
+  title         String
+  description   String
+  amount        Decimal?        @db.Decimal(14, 2)
+  priority      RequestPriority @default(NORMAL)
+  requestedDate DateTime?
+  status        RequestStatus   @default(SUBMITTED)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  approvalActions ApprovalAction[]
+  attachments     Attachment[]     @relation("RequestAttachments")
+
+  @@index([branchId, status])
+}
+
+enum ApprovalActionType {
+  VERIFY
+  APPROVE
+  REJECT
+  COMMENT
+  DISBURSE
+  ESCALATE
+}
+
+model ApprovalAction {
+  id        String             @id @default(cuid())
+  requestId String
+  request   Request            @relation(fields: [requestId], references: [id])
+  actorId   String
+  actor     User               @relation("ApprovalActor", fields: [actorId], references: [id])
+  action    ApprovalActionType
+  comment   String?
+  createdAt DateTime           @default(now())
+
+  @@index([requestId])
+}
+
+model Attachment {
+  id         String   @id @default(cuid())
+  url        String
+  fileName   String
+  uploadedAt DateTime @default(now())
+
+  requestId  String?
+  request    Request? @relation("RequestAttachments", fields: [requestId], references: [id])
+  taskId     String?
+  task       Task?    @relation("TaskAttachments", fields: [taskId], references: [id])
+  assetId    String?
+  asset      Asset?   @relation("AssetAttachments", fields: [assetId], references: [id])
+}
+
+// ---------------------------------------------------------------------------
+// 7. Documents, Memos & Records
+// ---------------------------------------------------------------------------
+
+enum DocumentType {
+  MEMO
+  POLICY
+  MINUTES
+  LETTER
+  CERTIFICATE
+  OTHER
+}
+
+enum DocumentScope {
+  ALL
+  BRANCH
+  MINISTRY
+  ROLE
+}
+
+model Document {
+  id             String        @id @default(cuid())
+  type           DocumentType
+  title          String
+  fileUrl        String
+  scope          DocumentScope @default(ALL)
+  targetBranchId String?
+  targetBranch   Branch?       @relation("DocumentTargetBranch", fields: [targetBranchId], references: [id])
+  targetMinistryId String?
+  targetMinistry Ministry?     @relation("DocumentTargetMinistry", fields: [targetMinistryId], references: [id])
+  targetRole     Role?
+  requiresAck    Boolean       @default(false)
+  uploadedById   String
+  uploadedBy     User          @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
+  createdAt      DateTime      @default(now())
+
+  acknowledgements Acknowledgement[]
+
+  @@index([scope])
+}
+
+model Acknowledgement {
+  id             String   @id @default(cuid())
+  documentId     String
+  document       Document @relation(fields: [documentId], references: [id])
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  acknowledgedAt DateTime @default(now())
+
+  @@unique([documentId, userId])
+}
+
+model ChurchTheme {
+  id          String   @id @default(cuid())
+  month       Int
+  year        Int
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+
+  @@unique([month, year])
+}
+
+// ---------------------------------------------------------------------------
+// 8. Equipment & Asset Register
+// ---------------------------------------------------------------------------
+
+enum AssetCondition {
+  NEW
+  GOOD
+  FAIR
+  NEEDS_REPAIR
+  DISPOSED
+}
+
+model Asset {
+  id             String         @id @default(cuid())
+  branchId       String
+  branch         Branch         @relation(fields: [branchId], references: [id])
+  name           String
+  category       String
+  serialNumber   String?
+  location       String?
+  custodianId    String?
+  custodian      User?          @relation("AssetCustodian", fields: [custodianId], references: [id])
+  purchaseValue  Decimal        @db.Decimal(14, 2)
+  purchaseDate   DateTime?
+  condition      AssetCondition @default(GOOD)
+  isDisposed     Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  maintenanceRecords MaintenanceRecord[]
+  attachments        Attachment[]        @relation("AssetAttachments")
+
+  @@index([branchId, isDisposed])
+}
+
+model MaintenanceRecord {
+  id          String   @id @default(cuid())
+  assetId     String
+  asset       Asset    @relation(fields: [assetId], references: [id])
+  description String
+  cost        Decimal? @db.Decimal(14, 2)
+  performedAt DateTime
+  performedBy String?
+  createdAt   DateTime @default(now())
+
+  @@index([assetId])
+}
+
+// ---------------------------------------------------------------------------
+// 9 & 10. Tasks / Department & Ministry Operations
+// ---------------------------------------------------------------------------
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  SUBMITTED
+  REVIEWED
+  COMPLETED
+}
+
+enum TaskPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+model Task {
+  id                String       @id @default(cuid())
+  title             String
+  description       String?
+  createdById       String
+  createdBy         User         @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  assignedToUserId  String?
+  assignedTo        User?        @relation("TaskAssignedTo", fields: [assignedToUserId], references: [id])
+  assignedToBranchId String?
+  assignedToBranch  Branch?      @relation("TaskTargetBranch", fields: [assignedToBranchId], references: [id])
+  assignedToMinistryId String?
+  assignedToMinistry Ministry?   @relation("TaskTargetMinistry", fields: [assignedToMinistryId], references: [id])
+  dueDate           DateTime?
+  priority          TaskPriority @default(NORMAL)
+  status            TaskStatus   @default(PENDING)
+  completionNotes   String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  attachments Attachment[] @relation("TaskAttachments")
+
+  @@index([status])
+  @@index([assignedToUserId])
+}
+
+// ---------------------------------------------------------------------------
+// 11. Communication & Engagement
+// ---------------------------------------------------------------------------
+
+enum AnnouncementScope {
+  ALL
+  BRANCH
+  ROLE
+}
+
+model Announcement {
+  id              String            @id @default(cuid())
+  title           String
+  body            String
+  scope           AnnouncementScope @default(ALL)
+  targetBranchId  String?
+  targetBranch    Branch?           @relation("AnnouncementTargetBranch", fields: [targetBranchId], references: [id])
+  targetRole      Role?
+  createdById     String
+  createdBy       User              @relation("AnnouncementCreatedBy", fields: [createdById], references: [id])
+  createdAt       DateTime          @default(now())
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  title       String
+  body        String
+  readAt      DateTime?
+  entityType  String?
+  entityId    String?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, readAt])
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  senderId   String
+  sender     User     @relation("MessageSender", fields: [senderId], references: [id])
+  branchId   String?  // branch <-> HQ thread key
+  body       String
+  createdAt  DateTime @default(now())
+
+  @@index([branchId, createdAt])
+}
+
+enum SmsPurpose {
+  ABSENTEE
+  BIRTHDAY
+  CUSTOM
+}
+
+enum SmsCampaignStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  SENT
+  CANCELLED
+}
+
+// Recipients are auto-identified (absentees, birthdays) but a human must
+// review and confirm before status can move to SENT — see PRD FR-16/FR-17.
+model SmsCampaign {
+  id             String            @id @default(cuid())
+  purpose        SmsPurpose
+  draftMessage   String
+  status         SmsCampaignStatus @default(DRAFT)
+  reviewedById   String?
+  createdAt      DateTime          @default(now())
+  sentAt         DateTime?
+
+  recipients SmsRecipient[]
+}
+
+model SmsRecipient {
+  id         String      @id @default(cuid())
+  campaignId String
+  campaign   SmsCampaign @relation(fields: [campaignId], references: [id])
+  memberId   String
+  member     Member      @relation(fields: [memberId], references: [id])
+  phone      String
+  status     String      @default("PENDING") // PENDING, SENT, FAILED, SKIPPED
+
+  @@index([campaignId])
+}
+
+// ---------------------------------------------------------------------------
+// 12. Audit Log
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id])
+  action     String   // e.g. "REQUEST_APPROVED", "ROLE_CHANGED", "EQUIPMENT_VALUATION_VIEWED"
+  entityType String
+  entityId   String?
+  before     Json?
+  after      Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([createdAt])
+}
