@@ -3,7 +3,12 @@
 
 generator client {
   provider      = "prisma-client-js"
-  binaryTargets = ["native", "rhel-openssl-3.0.x", "debian-openssl-3.0.x"]
+  // Netlify Functions run on Amazon Linux; the correct rhel-openssl target
+  // depends on the exact Node/OpenSSL version Netlify builds with, which we
+  // don't control precisely, so both are included here alongside "native"
+  // (local dev) and "debian-openssl-3.0.x" (Docker self-hosting) — a wrong
+  // or missing target here is a silent 500 on every DB call in production.
+  binaryTargets = ["native", "rhel-openssl-1.0.x", "rhel-openssl-3.0.x", "debian-openssl-3.0.x"]
 }
 
 datasource db {
