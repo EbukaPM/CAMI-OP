@@ -58,7 +58,9 @@ export function Button({
   ...props
 }: ComponentProps<"button"> & { variant?: "primary" | "secondary" | "ghost" | "danger"; size?: "sm" | "md" }) {
   const variants = {
-    primary: "bg-slate-900 text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900",
+    // Falls back to slate-900 when no --brand custom property is in scope
+    // (e.g. the login page, which renders outside the dashboard layout).
+    primary: "bg-[var(--brand,#0f172a)] text-white hover:opacity-90",
     secondary: "bg-slate-100 text-slate-900 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100",
     ghost: "bg-transparent text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800",
     danger: "bg-red-600 text-white hover:bg-red-500",
@@ -83,7 +85,7 @@ export function LinkButton({
   ...props
 }: ComponentProps<typeof Link> & { variant?: "primary" | "secondary" | "ghost" }) {
   const variants = {
-    primary: "bg-slate-900 text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900",
+    primary: "bg-[var(--brand,#0f172a)] text-white hover:opacity-90",
     secondary: "bg-slate-100 text-slate-900 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100",
     ghost: "bg-transparent text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800",
   };

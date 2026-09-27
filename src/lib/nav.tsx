@@ -12,6 +12,7 @@ import {
   ListChecks,
   MessagesSquare,
   ScrollText,
+  Settings,
   type LucideIcon,
 } from "lucide-react";
 
@@ -37,7 +38,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/pastoral",
     label: "Pastoral & Leadership",
     icon: Church,
-    roles: [Role.GENERAL_OVERSEER, Role.HQ_ADMIN, Role.BRANCH_PASTOR],
+    roles: [Role.GENERAL_OVERSEER, Role.HQ_ADMIN, Role.BRANCH_PASTOR, Role.BRANCH_ADMIN, Role.MINISTRY_LEADER],
   },
   {
     href: "/finance",
@@ -56,8 +57,5 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/tasks", label: "Tasks", icon: ListChecks },
   { href: "/communications", label: "Communications", icon: MessagesSquare },
   { href: "/audit-log", label: "Audit Log", icon: ScrollText, roles: [Role.GENERAL_OVERSEER, Role.HQ_ADMIN] },
+  { href: "/settings", label: "Settings", icon: Settings, roles: [Role.GENERAL_OVERSEER, Role.HQ_ADMIN] },
 ];
-
-export function visibleNavItems(role: Role) {
-  return NAV_ITEMS.filter((item) => !item.roles || item.roles.includes(role));
-}

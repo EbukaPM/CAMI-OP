@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isHqRole } from "@/lib/rbac";
@@ -53,8 +54,10 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
             <tbody>
               {members.map((m) => (
                 <tr key={m.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                  <td className="px-5 py-3 font-medium text-slate-900 dark:text-slate-100">
-                    {m.firstName} {m.lastName}
+                  <td className="px-5 py-3 font-medium">
+                    <Link href={`/members/${m.id}`} className="text-slate-900 hover:underline dark:text-slate-100">
+                      {m.firstName} {m.lastName}
+                    </Link>
                   </td>
                   {hq && <td className="px-5 py-3 text-slate-500">{m.branch.name}</td>}
                   <td className="px-5 py-3 text-slate-500">{m.phone ?? "—"}</td>

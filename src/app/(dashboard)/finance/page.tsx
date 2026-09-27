@@ -6,7 +6,7 @@ import { RecordGivingModal } from "./record-giving-modal";
 import { SubmitExpenseModal } from "./submit-expense-modal";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, LinkButton, StatCard } from "@/components/ui/primitives";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { FileDown } from "lucide-react";
+import { FileDown, TrendingUp } from "lucide-react";
 
 export default async function FinancePage({
   searchParams,
@@ -53,6 +53,11 @@ export default async function FinancePage({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {scopedBranchId && (
+            <LinkButton href={`/branches/${scopedBranchId}`} variant="ghost">
+              <TrendingUp size={14} /> Monthly branch report
+            </LinkButton>
+          )}
           <LinkButton href={pdfHref} variant="ghost">
             <FileDown size={14} /> Download PDF
           </LinkButton>

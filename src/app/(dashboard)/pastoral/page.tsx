@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isHqRole } from "@/lib/rbac";
@@ -10,7 +11,19 @@ export default async function PastoralPage() {
   const session = await requireSession();
   const hq = isHqRole(session.role);
 
-  const [pastors, branches, assignments] = await Promise.all([
+  // HQ monitors pastors and leaders church-wide; a branch's own leadership
+  // monitors the leaders/workers in their branch (plus their own record).
+  const peopleWhere = hq
+    ? { role: { in: [Role.BRANCH_PASTOR, Role.GENERAL_OVERSEER, Role.MINISTRY_LEADER] } }
+    : {
+        OR: [
+          { id: session.userId },
+          { branchId: session.branchId ?? "__none__", role: { in: [Role.MINISTRY_LEADER, Role.WORKER] } },
+        ],
+      };
+
+  const [people, pastorsForAssignment, branches, assignments] = await Promise.all([
+    db.user.findMany({ where: peopleWhere, orderBy: { fullName: "asc" } }),
     db.user.findMany({ where: { role: { in: [Role.BRANCH_PASTOR, Role.GENERAL_OVERSEER] } }, orderBy: { fullName: "asc" } }),
     db.branch.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     db.preachingAssignment.findMany({
@@ -26,23 +39,27 @@ export default async function PastoralPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Pastoral &amp; Leadership</h1>
-          <p className="text-sm text-slate-500">Pastor records and preaching assignment scheduling.</p>
+          <p className="text-sm text-slate-500">Pastor and leader records, career history, and preaching assignments.</p>
         </div>
-        {hq && <ScheduleAssignmentModal pastors={pastors} branches={branches} />}
+        {hq && <ScheduleAssignmentModal pastors={pastorsForAssignment} branches={branches} />}
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Pastors</CardTitle>
+          <CardTitle>{hq ? "Pastors & leaders" : "Your branch's leaders"} ({people.length})</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          {pastors.map((p) => (
-            <div key={p.id} className="flex items-center justify-between border-b border-slate-100 py-2 last:border-0 dark:border-slate-800">
+          {people.map((p) => (
+            <Link
+              key={p.id}
+              href={`/pastoral/${p.id}`}
+              className="flex items-center justify-between rounded-lg border-b border-slate-100 py-2 px-2 -mx-2 last:border-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"
+            >
               <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{p.fullName}</span>
               <Badge color="blue">{ROLE_LABELS[p.role]}</Badge>
-            </div>
+            </Link>
           ))}
-          {pastors.length === 0 && <p className="text-sm text-slate-500">No pastors recorded yet.</p>}
+          {people.length === 0 && <p className="text-sm text-slate-500">No one recorded yet.</p>}
         </CardContent>
       </Card>
 

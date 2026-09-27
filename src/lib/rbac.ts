@@ -78,6 +78,49 @@ export function canManageBranch(session: SessionPayload, branchId: string) {
   );
 }
 
+/** Basic info needed to reason about access to another user's pastoral/leadership profile. */
+export type ProfileTarget = { id: string; role: Role; branchId: string | null };
+
+/** HQ sees everyone; branch leadership can view their own branch's people; anyone can view their own profile. */
+export function canViewPastoralProfile(session: SessionPayload, target: ProfileTarget) {
+  if (isHqRole(session.role)) return true;
+  if (session.userId === target.id) return true;
+  return (
+    (session.role === Role.BRANCH_PASTOR || session.role === Role.BRANCH_ADMIN) &&
+    session.branchId === target.branchId
+  );
+}
+
+/**
+ * Who can manage (add appointments/trainings, edit rank) a pastoral profile.
+ * Per the PRD: Headquarters monitors pastors AND leaders; a branch's own
+ * leadership only monitors leaders/workers in their own branch — a branch
+ * pastor can't edit another pastor's record, only their own bio (see
+ * canEditOwnBio) and their branch's leaders/workers.
+ */
+export function canManagePastoralProfile(session: SessionPayload, target: ProfileTarget) {
+  if (isHqRole(session.role)) return true;
+  if (target.role === Role.BRANCH_PASTOR || target.role === Role.GENERAL_OVERSEER) return false;
+  return (
+    (session.role === Role.BRANCH_PASTOR || session.role === Role.BRANCH_ADMIN) && session.branchId === target.branchId
+  );
+}
+
+/** Anyone can edit their own bio/qualifications, even if they can't manage their own record otherwise. */
+export function canEditOwnBio(session: SessionPayload, targetUserId: string) {
+  return session.userId === targetUserId;
+}
+
+/** Salary is treated as sensitive finance data — HQ or the person themselves only. */
+export function canViewSalary(session: SessionPayload, targetUserId: string) {
+  return isHqRole(session.role) || session.userId === targetUserId;
+}
+
+/** Branding, role-permission matrix, and per-user module grants — Headquarters admins only. */
+export function canManageSettings(session: SessionPayload) {
+  return isHqRole(session.role) && (session.role === Role.GENERAL_OVERSEER || session.role === Role.HQ_ADMIN);
+}
+
 export class ForbiddenError extends Error {
   constructor(message = "Forbidden") {
     super(message);

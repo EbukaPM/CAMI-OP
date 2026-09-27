@@ -1,20 +1,29 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/auth";
-import { visibleNavItems } from "@/lib/nav";
+import { NAV_ITEMS } from "@/lib/nav";
+import { getVisibleModules } from "@/lib/permissions";
+import { getChurchSettings } from "@/lib/settings";
 import { ROLE_LABELS } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { logoutAction } from "./logout-action";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession();
-  const items = visibleNavItems(session.role);
+  const [visibleModules, settings] = await Promise.all([getVisibleModules(session), getChurchSettings()]);
+  const items = NAV_ITEMS.filter((item) => visibleModules.has(item.href.slice(1) || "dashboard"));
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
+    <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950" style={{ ["--brand" as string]: settings.primaryColor }}>
       <aside className="hidden h-screen w-64 shrink-0 overflow-y-auto border-r border-slate-200 bg-white px-4 py-6 dark:border-slate-800 dark:bg-slate-900 md:block">
-        <div className="mb-8 px-2">
-          <p className="text-base font-semibold text-slate-900 dark:text-slate-100">CAMI OP</p>
-          <p className="text-xs text-slate-500">Operations Portal</p>
+        <div className="mb-8 flex items-center gap-2 px-2">
+          {settings.logoFileAssetId ? (
+            // eslint-disable-next-line @next/next/no-img-element -- small, DB-served logo; not worth Next/Image's remote-loader config
+            <img src={`/api/files/${settings.logoFileAssetId}`} alt={settings.churchName} className="h-8 w-8 rounded object-cover" />
+          ) : null}
+          <div>
+            <p className="text-base font-semibold text-slate-900 dark:text-slate-100">{settings.churchName}</p>
+            <p className="text-xs text-slate-500">Operations Portal</p>
+          </div>
         </div>
         <nav className="space-y-1">
           {items.map((item) => {
@@ -35,7 +44,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
       <div className="flex h-screen min-w-0 flex-1 flex-col">
         <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6 py-3 dark:border-slate-800 dark:bg-slate-900">
-          <div className="text-sm font-semibold text-slate-900 dark:text-slate-100 md:hidden">CAMI OP</div>
+          <div className="text-sm font-semibold text-slate-900 dark:text-slate-100 md:hidden">{settings.churchName}</div>
           <div className="ml-auto flex items-center gap-4">
             <ThemeToggle />
             <div className="text-right">

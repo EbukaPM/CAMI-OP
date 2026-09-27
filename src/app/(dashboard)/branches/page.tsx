@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { canManageUsers } from "@/lib/rbac";
@@ -43,7 +44,11 @@ export default async function BranchesPage() {
             <tbody>
               {branches.map((b) => (
                 <tr key={b.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                  <td className="px-5 py-3 font-medium text-slate-900 dark:text-slate-100">{b.name}</td>
+                  <td className="px-5 py-3 font-medium">
+                    <Link href={`/branches/${b.id}`} className="text-slate-900 hover:underline dark:text-slate-100">
+                      {b.name}
+                    </Link>
+                  </td>
                   <td className="px-5 py-3 text-slate-500">{b.code}</td>
                   <td className="px-5 py-3 text-slate-500">{[b.city, b.state].filter(Boolean).join(", ") || "—"}</td>
                   <td className="px-5 py-3 text-slate-500">{b._count.members}</td>

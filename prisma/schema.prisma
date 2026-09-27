@@ -135,8 +135,11 @@ model User {
   sentMessages        Message[]             @relation("MessageSender")
 
   preachingAssignments PreachingAssignment[] @relation("PreachingPastor")
+  appointments        Appointment[]
 
   auditLogs           AuditLog[]
+  moduleGrants        UserModuleGrant[]      @relation("UserModuleGrantUser")
+  grantedModules      UserModuleGrant[]      @relation("UserModuleGrantGrantedBy")
 
   @@index([role])
   @@index([branchId])
@@ -178,10 +181,13 @@ model Member {
   address               String?
   householdId           String?
   household             Household? @relation(fields: [householdId], references: [id])
+  photoFileAssetId      String?    @unique
+  photo                 FileAsset? @relation(fields: [photoFileAssetId], references: [id])
   membershipStatus      MembershipStatus @default(ACTIVE)
   joinedAt              DateTime?
   baptismDate           DateTime?
   foundationClassDone   Boolean  @default(false)
+  attendanceNotes       String?
   notes                 String?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
@@ -234,6 +240,8 @@ model PastorProfile {
   ordinationDate   DateTime?
   qualifications   String?
   bio              String?
+  currentRank      String? // e.g. "Associate Pastor", "Senior Pastor" — free text, updated as they're promoted
+  salary           Decimal? @db.Decimal(12, 2) // restricted like other finance figures — see lib/rbac.ts
   createdAt        DateTime @default(now())
 }
 
@@ -244,9 +252,13 @@ enum AppointmentType {
   APPOINTMENT
 }
 
+// A career-history entry for any user (pastor, leader, or worker) — postings,
+// promotions, trainings attended, general appointments. This is how a
+// leader's growth (and eventual ordination to pastor) gets tracked over time.
 model Appointment {
   id          String          @id @default(cuid())
   userId      String
+  user        User            @relation(fields: [userId], references: [id])
   branchId    String?
   branch      Branch?         @relation(fields: [branchId], references: [id])
   positionTitle String
@@ -484,8 +496,10 @@ model FileAsset {
   uploadedById String?
   createdAt    DateTime @default(now())
 
-  document   Document?
-  attachment Attachment?
+  document      Document?
+  attachment    Attachment?
+  memberPhotoOf Member?
+  churchLogoOf  ChurchSettings?
 }
 
 // ---------------------------------------------------------------------------
@@ -752,4 +766,50 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([actorId])
   @@index([createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// 13. Settings: branding & module access
+// ---------------------------------------------------------------------------
+
+// Singleton (single row, id = "default") holding church-wide branding.
+model ChurchSettings {
+  id              String     @id @default("default")
+  churchName      String     @default("CAMI Church")
+  primaryColor    String     @default("#0f172a") // hex, applied as the app's accent color
+  logoFileAssetId String?    @unique
+  logo            FileAsset? @relation(fields: [logoFileAssetId], references: [id])
+  updatedAt       DateTime   @updatedAt
+}
+
+// Which sidebar modules a role can see, editable by HQ admins/GO. A missing
+// row for a (role, module) pair falls back to the hardcoded default in
+// lib/nav.tsx — this table only needs to hold the overrides an admin makes.
+// This governs sidebar/page visibility only; the hard security rules (branch
+// scoping, the restricted equipment valuation) stay enforced in lib/rbac.ts
+// regardless of what's toggled here.
+model ModulePermission {
+  id      String  @id @default(cuid())
+  role    Role
+  module  String
+  allowed Boolean
+
+  @@unique([role, module])
+}
+
+// A one-off grant of a module to a specific user beyond what their role
+// normally allows — e.g. a Ministry Leader given access to Documents without
+// promoting them. Explicit grants win over both the role default and any
+// ModulePermission override.
+model UserModuleGrant {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation("UserModuleGrantUser", fields: [userId], references: [id])
+  module        String
+  allowed       Boolean  @default(true)
+  grantedById   String?
+  grantedBy     User?    @relation("UserModuleGrantGrantedBy", fields: [grantedById], references: [id])
+  createdAt     DateTime @default(now())
+
+  @@unique([userId, module])
 }
