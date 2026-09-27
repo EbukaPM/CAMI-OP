@@ -1,13 +1,12 @@
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { canManageUsers } from "@/lib/rbac";
-import { createBranchAction } from "./actions";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, ErrorText, Field, Input } from "@/components/ui/primitives";
+import { CreateBranchModal } from "./create-branch-modal";
+import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/primitives";
 import { formatDate } from "@/lib/utils";
 
-export default async function BranchesPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+export default async function BranchesPage() {
   const session = await requireSession();
-  const { error } = await searchParams;
   const canCreate = canManageUsers(session);
 
   const branches = await db.branch.findMany({
@@ -17,50 +16,13 @@ export default async function BranchesPage({ searchParams }: { searchParams: Pro
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Branches</h1>
-        <p className="text-sm text-slate-500">Headquarters and branch structure across the church.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Branches</h1>
+          <p className="text-sm text-slate-500">Headquarters and branch structure across the church.</p>
+        </div>
+        {canCreate && <CreateBranchModal />}
       </div>
-
-      {canCreate && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Register a new branch</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form action={createBranchAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Branch name">
-                <Input name="name" required placeholder="CAMI Church — Lekki" />
-              </Field>
-              <Field label="Branch code">
-                <Input name="code" required placeholder="LEKKI-01" />
-              </Field>
-              <Field label="Address">
-                <Input name="address" placeholder="Street address" />
-              </Field>
-              <Field label="City">
-                <Input name="city" placeholder="City" />
-              </Field>
-              <Field label="State">
-                <Input name="state" placeholder="State" />
-              </Field>
-              <Field label="Contact phone">
-                <Input name="contactPhone" placeholder="+234..." />
-              </Field>
-              <Field label="Contact email">
-                <Input name="contactEmail" type="email" placeholder="branch@camichurch.org" />
-              </Field>
-              <Field label="Service schedule">
-                <Input name="serviceSchedule" placeholder="Sundays 8am & 10am" />
-              </Field>
-              <div className="sm:col-span-2">
-                <ErrorText>{error}</ErrorText>
-                <Button type="submit">Create branch</Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      )}
 
       <Card>
         <CardHeader>

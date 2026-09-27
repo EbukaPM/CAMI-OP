@@ -1,11 +1,12 @@
 "use server";
 
 import { z } from "zod";
-import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireSession } from "@/lib/auth";
 import { canManageUsers, ForbiddenError } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
+import type { ActionState } from "@/lib/action-state";
 
 const branchSchema = z.object({
   name: z.string().min(2),
@@ -18,16 +19,16 @@ const branchSchema = z.object({
   serviceSchedule: z.string().optional(),
 });
 
-export async function createBranchAction(formData: FormData) {
+export async function createBranchAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const session = await requireSession();
   if (!canManageUsers(session)) throw new ForbiddenError("Only Headquarters administrators can create branches.");
 
   const parsed = branchSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) {
-    redirect(`/branches?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid input")}`);
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
 
-  const branch = await db.branch.create({ data: parsed.data as z.infer<typeof branchSchema> });
+  const branch = await db.branch.create({ data: parsed.data });
 
   await writeAuditLog({
     actor: session,
@@ -37,5 +38,6 @@ export async function createBranchAction(formData: FormData) {
     after: branch,
   });
 
-  redirect("/branches");
+  revalidatePath("/branches");
+  return { success: true };
 }

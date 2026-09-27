@@ -1,17 +1,13 @@
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isHqRole } from "@/lib/rbac";
-import { createMemberAction } from "./actions";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, ErrorText, Field, Input, Select } from "@/components/ui/primitives";
+import { CreateMemberModal } from "./create-member-modal";
+import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/primitives";
 import { formatDate } from "@/lib/utils";
 
-export default async function MembersPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string; branchId?: string }>;
-}) {
+export default async function MembersPage({ searchParams }: { searchParams: Promise<{ branchId?: string }> }) {
   const session = await requireSession();
-  const { error, branchId: filterBranchId } = await searchParams;
+  const { branchId: filterBranchId } = await searchParams;
   const hq = isHqRole(session.role);
 
   const branches = hq
@@ -27,71 +23,17 @@ export default async function MembersPage({
     take: 200,
   });
 
-  const defaultBranchId = hq ? "" : session.branchId ?? "";
-
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Members</h1>
-        <p className="text-sm text-slate-500">
-          {hq ? "Church-wide member records, filterable by branch." : "Members of your branch."}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Members</h1>
+          <p className="text-sm text-slate-500">
+            {hq ? "Church-wide member records, filterable by branch." : "Members of your branch."}
+          </p>
+        </div>
+        <CreateMemberModal branches={branches} defaultBranchId={hq ? "" : session.branchId ?? ""} />
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Add a member</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form action={createMemberAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {hq ? (
-              <Field label="Branch">
-                <Select name="branchId" required defaultValue="">
-                  <option value="" disabled>
-                    Select branch
-                  </option>
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-            ) : (
-              <input type="hidden" name="branchId" value={defaultBranchId} />
-            )}
-            <Field label="First name">
-              <Input name="firstName" required />
-            </Field>
-            <Field label="Last name">
-              <Input name="lastName" required />
-            </Field>
-            <Field label="Phone">
-              <Input name="phone" />
-            </Field>
-            <Field label="Email">
-              <Input name="email" type="email" />
-            </Field>
-            <Field label="Date of birth">
-              <Input name="dateOfBirth" type="date" />
-            </Field>
-            <Field label="Gender">
-              <Select name="gender" defaultValue="">
-                <option value="">—</option>
-                <option value="Male">Male</option>
-                <option value="Female">Female</option>
-              </Select>
-            </Field>
-            <Field label="Occupation">
-              <Input name="occupation" />
-            </Field>
-            <div className="sm:col-span-2">
-              <ErrorText>{error}</ErrorText>
-              <Button type="submit">Add member</Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>

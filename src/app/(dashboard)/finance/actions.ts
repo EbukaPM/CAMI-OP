@@ -2,10 +2,12 @@
 
 import { z } from "zod";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireSession } from "@/lib/auth";
 import { canAccessFinance, isHqRole, ForbiddenError } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
+import type { ActionState } from "@/lib/action-state";
 
 const givingSchema = z.object({
   branchId: z.string().min(1),
@@ -15,13 +17,13 @@ const givingSchema = z.object({
   notes: z.string().optional(),
 });
 
-export async function recordGivingAction(formData: FormData) {
+export async function recordGivingAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const session = await requireSession();
   const parsed = givingSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) {
-    redirect(`/finance?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid input")}`);
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
-  const data = parsed.data as z.infer<typeof givingSchema>;
+  const data = parsed.data;
 
   if (!canAccessFinance(session, data.branchId)) {
     throw new ForbiddenError("You can only record giving for your own branch.");
@@ -50,7 +52,8 @@ export async function recordGivingAction(formData: FormData) {
     after: { branchId: data.branchId, categoryId: data.categoryId, amount: data.amount },
   });
 
-  redirect(isHqRole(session.role) ? `/finance?branchId=${data.branchId}` : "/finance");
+  revalidatePath("/finance");
+  return { success: true };
 }
 
 const expenseSchema = z.object({
@@ -60,13 +63,13 @@ const expenseSchema = z.object({
   description: z.string().optional(),
 });
 
-export async function recordExpenseAction(formData: FormData) {
+export async function recordExpenseAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const session = await requireSession();
   const parsed = expenseSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) {
-    redirect(`/finance?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid input")}`);
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
-  const data = parsed.data as z.infer<typeof expenseSchema>;
+  const data = parsed.data;
 
   if (!canAccessFinance(session, data.branchId)) {
     throw new ForbiddenError("You can only record expenses for your own branch.");
@@ -91,7 +94,8 @@ export async function recordExpenseAction(formData: FormData) {
     after: { branchId: data.branchId, category: data.category, amount: data.amount },
   });
 
-  redirect(isHqRole(session.role) ? `/finance?branchId=${data.branchId}` : "/finance");
+  revalidatePath("/finance");
+  return { success: true };
 }
 
 export async function decideExpenseAction(formData: FormData) {

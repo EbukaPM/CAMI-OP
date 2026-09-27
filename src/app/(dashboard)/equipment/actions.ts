@@ -2,11 +2,14 @@
 
 import { z } from "zod";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { AssetCondition } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireSession } from "@/lib/auth";
-import { canManageBranch, isHqRole, ForbiddenError } from "@/lib/rbac";
+import { canManageBranch, ForbiddenError } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
+import { storeUploadedFile, getOptionalFile, UploadError } from "@/lib/uploads";
+import type { ActionState } from "@/lib/action-state";
 
 const assetSchema = z.object({
   branchId: z.string().min(1),
@@ -19,13 +22,13 @@ const assetSchema = z.object({
   condition: z.nativeEnum(AssetCondition),
 });
 
-export async function createAssetAction(formData: FormData) {
+export async function createAssetAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const session = await requireSession();
   const parsed = assetSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) {
-    redirect(`/equipment?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid input")}`);
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
-  const data = parsed.data as z.infer<typeof assetSchema>;
+  const data = parsed.data;
 
   if (!canManageBranch(session, data.branchId)) {
     throw new ForbiddenError("You can only register equipment for your own branch.");
@@ -44,6 +47,21 @@ export async function createAssetAction(formData: FormData) {
     },
   });
 
+  const photo = getOptionalFile(formData, "photo");
+  if (photo) {
+    try {
+      const fileAsset = await storeUploadedFile(photo, session.userId);
+      if (fileAsset) {
+        await db.attachment.create({
+          data: { assetId: asset.id, fileAssetId: fileAsset.id, fileName: photo.name },
+        });
+      }
+    } catch (err) {
+      if (err instanceof UploadError) return { error: err.message };
+      throw err;
+    }
+  }
+
   // Adding an asset changes the restricted valuation total, so it's logged
   // like every other valuation-affecting action (PRD Section 3.3 / 7).
   await writeAuditLog({
@@ -54,7 +72,8 @@ export async function createAssetAction(formData: FormData) {
     after: { branchId: data.branchId, name: data.name, purchaseValue: data.purchaseValue },
   });
 
-  redirect(isHqRole(session.role) ? `/equipment?branchId=${data.branchId}` : "/equipment");
+  revalidatePath("/equipment");
+  return { success: true };
 }
 
 export async function disposeAssetAction(formData: FormData) {

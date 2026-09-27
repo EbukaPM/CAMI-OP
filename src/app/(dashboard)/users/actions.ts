@@ -2,12 +2,14 @@
 
 import { z } from "zod";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { Role } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireSession } from "@/lib/auth";
 import { canManageUsers, ForbiddenError } from "@/lib/rbac";
 import { hashPassword } from "@/lib/auth";
 import { writeAuditLog } from "@/lib/audit";
+import type { ActionState } from "@/lib/action-state";
 
 const HQ_ONLY_ROLES: Role[] = [Role.GENERAL_OVERSEER, Role.HQ_ADMIN, Role.HQ_FINANCE];
 
@@ -25,7 +27,7 @@ const userSchema = z
     path: ["branchId"],
   });
 
-export async function createUserAction(formData: FormData) {
+export async function createUserAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const session = await requireSession();
   if (!canManageUsers(session)) throw new ForbiddenError("Only Headquarters administrators can manage users.");
 
@@ -33,13 +35,13 @@ export async function createUserAction(formData: FormData) {
   const parsed = userSchema.safeParse({ ...raw, branchId: raw.branchId || undefined });
 
   if (!parsed.success) {
-    redirect(`/users?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid input")}`);
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
 
-  const data = parsed.data as z.infer<typeof userSchema>;
+  const data = parsed.data;
   const existing = await db.user.findUnique({ where: { email: data.email.toLowerCase() } });
   if (existing) {
-    redirect(`/users?error=${encodeURIComponent("A user with that email already exists.")}`);
+    return { error: "A user with that email already exists." };
   }
 
   const passwordHash = await hashPassword(data.password);
@@ -62,7 +64,8 @@ export async function createUserAction(formData: FormData) {
     after: { email: user.email, role: user.role, branchId: user.branchId },
   });
 
-  redirect("/users");
+  revalidatePath("/users");
+  return { success: true };
 }
 
 export async function setUserActiveAction(formData: FormData) {

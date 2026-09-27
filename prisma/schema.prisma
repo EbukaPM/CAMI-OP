@@ -456,10 +456,12 @@ model ApprovalAction {
 }
 
 model Attachment {
-  id         String   @id @default(cuid())
-  url        String
-  fileName   String
-  uploadedAt DateTime @default(now())
+  id          String     @id @default(cuid())
+  url         String? // external link, if not an uploaded file
+  fileAssetId String?    @unique
+  fileAsset   FileAsset? @relation(fields: [fileAssetId], references: [id])
+  fileName    String
+  uploadedAt  DateTime   @default(now())
 
   requestId  String?
   request    Request? @relation("RequestAttachments", fields: [requestId], references: [id])
@@ -467,6 +469,23 @@ model Attachment {
   task       Task?    @relation("TaskAttachments", fields: [taskId], references: [id])
   assetId    String?
   asset      Asset?   @relation("AssetAttachments", fields: [assetId], references: [id])
+}
+
+// Uploaded file bytes, stored directly in Postgres so the app needs no
+// separate object-storage account to work — fine for the memo/photo/manual
+// sized files this app deals with. Capped at a few MB by the upload route
+// (see src/lib/uploads.ts) to stay under serverless request-body limits.
+model FileAsset {
+  id           String   @id @default(cuid())
+  filename     String
+  mimeType     String
+  size         Int
+  data         Bytes
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  document   Document?
+  attachment Attachment?
 }
 
 // ---------------------------------------------------------------------------
@@ -493,7 +512,9 @@ model Document {
   id             String        @id @default(cuid())
   type           DocumentType
   title          String
-  fileUrl        String
+  fileUrl        String? // external link, if not an uploaded file
+  fileAssetId    String?       @unique
+  fileAsset      FileAsset?    @relation(fields: [fileAssetId], references: [id])
   scope          DocumentScope @default(ALL)
   targetBranchId String?
   targetBranch   Branch?       @relation("DocumentTargetBranch", fields: [targetBranchId], references: [id])

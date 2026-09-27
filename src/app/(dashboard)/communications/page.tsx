@@ -1,10 +1,11 @@
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { canManageUsers, isHqRole } from "@/lib/rbac";
-import { createAnnouncementAction, generateBirthdayCampaignAction, approveSendCampaignAction } from "./actions";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Field, Input, Select, Textarea } from "@/components/ui/primitives";
+import { generateBirthdayCampaignAction, approveSendCampaignAction } from "./actions";
+import { CreateAnnouncementModal } from "./create-announcement-modal";
+import { EditCampaignMessageModal } from "./edit-campaign-message-modal";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/primitives";
 import { formatDate } from "@/lib/utils";
-import { AnnouncementScope } from "@prisma/client";
 
 export default async function CommunicationsPage() {
   const session = await requireSession();
@@ -21,20 +22,26 @@ export default async function CommunicationsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Communications</h1>
-        <p className="text-sm text-slate-500">Announcements and targeted SMS — every send needs manual confirmation.</p>
+        <p className="text-sm text-slate-500">Announcements and targeted SMS/email — every send needs manual confirmation.</p>
       </div>
 
       {canManage && (
         <Card>
           <CardHeader>
-            <CardTitle>Birthday SMS</CardTitle>
+            <CardTitle>Birthday messages</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <form action={generateBirthdayCampaignAction}>
-              <Button type="submit" variant="secondary">
-                Draft this week&apos;s birthday messages
-              </Button>
-            </form>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-slate-500">
+                Drafts a message for members with a birthday in the next 7 days. Sends by SMS (Twilio) if the member
+                has a phone number and/or by email (Resend) if they have an email — nothing goes out until reviewed.
+              </p>
+              <form action={generateBirthdayCampaignAction}>
+                <Button type="submit" variant="secondary">
+                  Draft this week&apos;s birthday messages
+                </Button>
+              </form>
+            </div>
             {campaigns.map((c) => (
               <div key={c.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-100 p-3 dark:border-slate-800">
                 <div>
@@ -47,12 +54,15 @@ export default async function CommunicationsPage() {
                 <div className="flex items-center gap-2">
                   <Badge color={c.status === "SENT" ? "green" : "amber"}>{c.status.replace("_", " ")}</Badge>
                   {c.status === "PENDING_REVIEW" && (
-                    <form action={approveSendCampaignAction}>
-                      <input type="hidden" name="campaignId" value={c.id} />
-                      <Button type="submit" size="sm">
-                        Review &amp; send
-                      </Button>
-                    </form>
+                    <>
+                      <EditCampaignMessageModal campaignId={c.id} draftMessage={c.draftMessage} />
+                      <form action={approveSendCampaignAction}>
+                        <input type="hidden" name="campaignId" value={c.id} />
+                        <Button type="submit" size="sm">
+                          Review &amp; send
+                        </Button>
+                      </form>
+                    </>
                   )}
                 </div>
               </div>
@@ -61,37 +71,12 @@ export default async function CommunicationsPage() {
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Post an announcement</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form action={createAnnouncementAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Title">
-              <Input name="title" required />
-            </Field>
-            <Field label="Scope">
-              <Select name="scope" required defaultValue={AnnouncementScope.ALL}>
-                <option value={AnnouncementScope.ALL}>Everyone</option>
-                <option value={AnnouncementScope.BRANCH}>My branch</option>
-              </Select>
-            </Field>
-            <div className="sm:col-span-2">
-              <Field label="Message">
-                <Textarea name="body" rows={3} required />
-              </Field>
-            </div>
-            <div className="sm:col-span-2">
-              <Button type="submit">Post announcement</Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Announcements</h2>
+        <CreateAnnouncementModal />
+      </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Announcements</CardTitle>
-        </CardHeader>
         <CardContent className="space-y-3">
           {announcements.map((a) => (
             <div key={a.id} className="border-b border-slate-100 pb-3 last:border-0 last:pb-0 dark:border-slate-800">

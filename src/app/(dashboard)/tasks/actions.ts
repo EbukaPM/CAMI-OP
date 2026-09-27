@@ -2,11 +2,13 @@
 
 import { z } from "zod";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { TaskPriority, TaskStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireSession } from "@/lib/auth";
 import { ForbiddenError } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
+import type { ActionState } from "@/lib/action-state";
 
 const taskSchema = z.object({
   title: z.string().min(2),
@@ -16,14 +18,14 @@ const taskSchema = z.object({
   priority: z.nativeEnum(TaskPriority),
 });
 
-export async function createTaskAction(formData: FormData) {
+export async function createTaskAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const session = await requireSession();
   const raw = Object.fromEntries(formData.entries());
   const parsed = taskSchema.safeParse({ ...raw, assignedToUserId: raw.assignedToUserId || undefined });
   if (!parsed.success) {
-    redirect(`/tasks?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid input")}`);
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
-  const data = parsed.data as z.infer<typeof taskSchema>;
+  const data = parsed.data;
 
   const task = await db.task.create({
     data: {
@@ -38,7 +40,8 @@ export async function createTaskAction(formData: FormData) {
   });
 
   await writeAuditLog({ actor: session, action: "TASK_CREATED", entityType: "Task", entityId: task.id, after: task });
-  redirect("/tasks");
+  revalidatePath("/tasks");
+  return { success: true };
 }
 
 export async function updateTaskStatusAction(formData: FormData) {

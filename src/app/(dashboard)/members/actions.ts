@@ -1,11 +1,12 @@
 "use server";
 
 import { z } from "zod";
-import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireSession } from "@/lib/auth";
-import { canManageBranch, isHqRole, ForbiddenError } from "@/lib/rbac";
+import { canManageBranch, ForbiddenError } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
+import type { ActionState } from "@/lib/action-state";
 
 const memberSchema = z.object({
   branchId: z.string().min(1),
@@ -18,16 +19,15 @@ const memberSchema = z.object({
   occupation: z.string().optional(),
 });
 
-export async function createMemberAction(formData: FormData) {
+export async function createMemberAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const session = await requireSession();
-  const raw = Object.fromEntries(formData.entries());
-  const parsed = memberSchema.safeParse(raw);
+  const parsed = memberSchema.safeParse(Object.fromEntries(formData.entries()));
 
   if (!parsed.success) {
-    redirect(`/members?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid input")}`);
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
 
-  const data = parsed.data as z.infer<typeof memberSchema>;
+  const data = parsed.data;
   if (!canManageBranch(session, data.branchId)) {
     throw new ForbiddenError("You can only add members to your own branch.");
   }
@@ -53,5 +53,6 @@ export async function createMemberAction(formData: FormData) {
     after: member,
   });
 
-  redirect(isHqRole(session.role) ? `/members?branchId=${data.branchId}` : "/members");
+  revalidatePath("/members");
+  return { success: true };
 }

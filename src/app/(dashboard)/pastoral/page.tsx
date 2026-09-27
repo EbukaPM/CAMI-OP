@@ -1,19 +1,18 @@
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isHqRole } from "@/lib/rbac";
-import { createPreachingAssignmentAction } from "./actions";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, ErrorText, Field, Input, Select } from "@/components/ui/primitives";
+import { ScheduleAssignmentModal } from "./schedule-assignment-modal";
+import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/primitives";
 import { formatDate, ROLE_LABELS } from "@/lib/utils";
 import { Role } from "@prisma/client";
 
-export default async function PastoralPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+export default async function PastoralPage() {
   const session = await requireSession();
-  const { error } = await searchParams;
   const hq = isHqRole(session.role);
 
   const [pastors, branches, assignments] = await Promise.all([
     db.user.findMany({ where: { role: { in: [Role.BRANCH_PASTOR, Role.GENERAL_OVERSEER] } }, orderBy: { fullName: "asc" } }),
-    hq ? db.branch.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }) : Promise.resolve([]),
+    db.branch.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     db.preachingAssignment.findMany({
       where: hq ? {} : { branchId: session.branchId ?? "__none__" },
       orderBy: { date: "desc" },
@@ -24,56 +23,13 @@ export default async function PastoralPage({ searchParams }: { searchParams: Pro
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Pastoral &amp; Leadership</h1>
-        <p className="text-sm text-slate-500">Pastor records and preaching assignment scheduling.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Pastoral &amp; Leadership</h1>
+          <p className="text-sm text-slate-500">Pastor records and preaching assignment scheduling.</p>
+        </div>
+        {hq && <ScheduleAssignmentModal pastors={pastors} branches={branches} />}
       </div>
-
-      {hq && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Schedule a preaching assignment</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form action={createPreachingAssignmentAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Pastor">
-                <Select name="pastorId" required defaultValue="">
-                  <option value="" disabled>
-                    Select pastor
-                  </option>
-                  {pastors.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.fullName}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Branch">
-                <Select name="branchId" required defaultValue="">
-                  <option value="" disabled>
-                    Select branch
-                  </option>
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Date">
-                <Input name="date" type="date" required />
-              </Field>
-              <Field label="Event / service">
-                <Input name="eventOrService" placeholder="Sunday Service, Anniversary..." />
-              </Field>
-              <div className="sm:col-span-2">
-                <ErrorText>{error}</ErrorText>
-                <Button type="submit">Schedule &amp; notify</Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      )}
 
       <Card>
         <CardHeader>

@@ -1,17 +1,20 @@
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isHqRole } from "@/lib/rbac";
-import { recordGivingAction, recordExpenseAction, decideExpenseAction } from "./actions";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, ErrorText, Field, Input, Select, StatCard } from "@/components/ui/primitives";
+import { decideExpenseAction } from "./actions";
+import { RecordGivingModal } from "./record-giving-modal";
+import { SubmitExpenseModal } from "./submit-expense-modal";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, LinkButton, StatCard } from "@/components/ui/primitives";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { FileDown } from "lucide-react";
 
 export default async function FinancePage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; branchId?: string }>;
+  searchParams: Promise<{ branchId?: string }>;
 }) {
   const session = await requireSession();
-  const { error, branchId: filterBranchId } = await searchParams;
+  const { branchId: filterBranchId } = await searchParams;
   const hq = isHqRole(session.role);
   const scopedBranchId = hq ? filterBranchId : session.branchId ?? undefined;
   const branchWhere = scopedBranchId ? { branchId: scopedBranchId } : hq ? {} : { branchId: "__none__" };
@@ -38,109 +41,30 @@ export default async function FinancePage({
   const totalGiving = Number(givingAgg._sum.amount ?? 0);
   const totalExpense = Number(expenseAgg._sum.amount ?? 0);
   const defaultBranchId = hq ? "" : session.branchId ?? "";
+  const pdfHref = `/api/reports/finance/pdf${scopedBranchId ? `?branchId=${scopedBranchId}` : ""}`;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Finance &amp; Giving</h1>
-        <p className="text-sm text-slate-500">
-          {hq ? "Consolidated income and expenditure across branches." : "Your branch's giving and expenses."}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Finance &amp; Giving</h1>
+          <p className="text-sm text-slate-500">
+            {hq ? "Consolidated income and expenditure across branches." : "Your branch's giving and expenses."}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <LinkButton href={pdfHref} variant="ghost">
+            <FileDown size={14} /> Download PDF
+          </LinkButton>
+          <SubmitExpenseModal branches={branches} defaultBranchId={defaultBranchId} />
+          <RecordGivingModal branches={branches} categories={categories} defaultBranchId={defaultBranchId} />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard label="Total Giving" value={formatCurrency(totalGiving)} />
         <StatCard label="Approved Expenses" value={formatCurrency(totalExpense)} />
         <StatCard label="Net" value={formatCurrency(totalGiving - totalExpense)} />
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Record giving</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form action={recordGivingAction} className="space-y-4">
-              {hq ? (
-                <Field label="Branch">
-                  <Select name="branchId" required defaultValue="">
-                    <option value="" disabled>
-                      Select branch
-                    </option>
-                    {branches.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              ) : (
-                <input type="hidden" name="branchId" value={defaultBranchId} />
-              )}
-              <Field label="Category">
-                <Select name="categoryId" required defaultValue="">
-                  <option value="" disabled>
-                    Select category
-                  </option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Service date">
-                <Input name="serviceDate" type="date" required />
-              </Field>
-              <Field label="Amount (NGN)">
-                <Input name="amount" type="number" min="0" step="0.01" required />
-              </Field>
-              <Field label="Notes">
-                <Input name="notes" />
-              </Field>
-              <ErrorText>{error}</ErrorText>
-              <Button type="submit">Record giving</Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Submit an expense</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form action={recordExpenseAction} className="space-y-4">
-              {hq ? (
-                <Field label="Branch">
-                  <Select name="branchId" required defaultValue="">
-                    <option value="" disabled>
-                      Select branch
-                    </option>
-                    {branches.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              ) : (
-                <input type="hidden" name="branchId" value={defaultBranchId} />
-              )}
-              <Field label="Category">
-                <Input name="category" required placeholder="Utilities, Repairs, Supplies..." />
-              </Field>
-              <Field label="Amount (NGN)">
-                <Input name="amount" type="number" min="0" step="0.01" required />
-              </Field>
-              <Field label="Description">
-                <Input name="description" />
-              </Field>
-              <Button type="submit" variant="secondary">
-                Submit expense for approval
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
       </div>
 
       <Card>

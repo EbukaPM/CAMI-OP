@@ -2,12 +2,14 @@
 
 import { z } from "zod";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { Role, RequestType, RequestPriority } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireSession } from "@/lib/auth";
 import { canManageBranch, isHqRole, ForbiddenError } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
 import { ESCALATION_THRESHOLD_NGN } from "@/lib/constants";
+import type { ActionState } from "@/lib/action-state";
 
 const requestSchema = z.object({
   branchId: z.string().min(1),
@@ -19,14 +21,14 @@ const requestSchema = z.object({
   requestedDate: z.string().optional(),
 });
 
-export async function createRequestAction(formData: FormData) {
+export async function createRequestAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const session = await requireSession();
   const raw = Object.fromEntries(formData.entries());
   const parsed = requestSchema.safeParse({ ...raw, amount: raw.amount || undefined });
   if (!parsed.success) {
-    redirect(`/requests?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid input")}`);
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
-  const data = parsed.data as z.infer<typeof requestSchema>;
+  const data = parsed.data;
 
   if (!canManageBranch(session, data.branchId) && session.role !== Role.FINANCE_OFFICER && session.role !== Role.MINISTRY_LEADER) {
     throw new ForbiddenError("You can only submit requests for your own branch.");
@@ -60,7 +62,8 @@ export async function createRequestAction(formData: FormData) {
     after: { branchId: data.branchId, type: data.type, amount: data.amount },
   });
 
-  redirect("/requests");
+  revalidatePath("/requests");
+  return { success: true };
 }
 
 const decisionSchema = z.object({
