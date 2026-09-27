@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { AssetCondition } from "@prisma/client";
 import { db } from "@/lib/db";
-import { requireSession } from "@/lib/auth";
+import { requireWriteSession as requireSession } from "@/lib/auth";
 import { canManageBranch, ForbiddenError } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
 import { storeUploadedFile, getOptionalFile, UploadError } from "@/lib/uploads";

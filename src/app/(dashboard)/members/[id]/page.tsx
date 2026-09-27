@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { isHqRole, ForbiddenError } from "@/lib/rbac";
+import { effectiveHq, ForbiddenError } from "@/lib/rbac";
 import { EditMemberModal } from "./edit-member-modal";
 import { AddFollowUpModal } from "./add-followup-modal";
 import { AddMinistryModal } from "./add-ministry-modal";
@@ -25,7 +25,7 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
   });
   if (!member) notFound();
 
-  if (!isHqRole(session.role) && session.branchId !== member.branchId) {
+  if (!effectiveHq(session) && session.branchId !== member.branchId) {
     throw new ForbiddenError("You can only view members in your own branch.");
   }
 
@@ -33,7 +33,7 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="sticky -top-6 z-10 -mx-6 -mt-6 mb-6 flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 bg-slate-50/95 px-6 py-4 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">
         <div className="flex items-center gap-4">
           {member.photoFileAssetId ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -52,7 +52,7 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
           </div>
           <Badge color={member.membershipStatus === "ACTIVE" ? "green" : "slate"}>{member.membershipStatus}</Badge>
         </div>
-        <EditMemberModal member={member} />
+        {!session.isViewOnly && <EditMemberModal member={member} />}
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -138,7 +138,7 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle>Ministry involvement</CardTitle>
-            <AddMinistryModal memberId={member.id} ministries={ministries} />
+            {!session.isViewOnly && <AddMinistryModal memberId={member.id} ministries={ministries} />}
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             {member.ministryInvolvements.map((mi) => (
@@ -154,7 +154,7 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle>Pastoral follow-ups</CardTitle>
-            <AddFollowUpModal memberId={member.id} />
+            {!session.isViewOnly && <AddFollowUpModal memberId={member.id} />}
           </CardHeader>
           <CardContent className="space-y-2">
             {member.followUps.map((f) => (
@@ -168,7 +168,7 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <Badge color={f.status === "CLOSED" ? "green" : "amber"}>{f.status}</Badge>
-                  {f.status !== "CLOSED" && (
+                  {f.status !== "CLOSED" && !session.isViewOnly && (
                     <form action={closeFollowUpAction}>
                       <input type="hidden" name="followUpId" value={f.id} />
                       <input type="hidden" name="memberId" value={member.id} />

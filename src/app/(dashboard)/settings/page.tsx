@@ -6,6 +6,7 @@ import { ALL_MODULES } from "@/lib/permissions";
 import { BrandingForm } from "./branding-form";
 import { GrantAccessModal } from "./grant-access-modal";
 import { updateModulePermissionsAction, revokeUserModuleGrantAction } from "./actions";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/primitives";
 import { ROLE_LABELS } from "@/lib/utils";
 import { Role } from "@prisma/client";
@@ -13,6 +14,7 @@ import { NAV_ITEMS } from "@/lib/nav";
 
 export default async function SettingsPage() {
   const session = await requireSession();
+  if (session.isViewOnly) throw new ForbiddenError("Not available while viewing a branch's portal.");
   if (!canManageSettings(session)) throw new ForbiddenError("Settings are restricted to Headquarters administrators.");
 
   const [settings, modulePermissions, grants, users] = await Promise.all([
@@ -34,10 +36,7 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Settings</h1>
-        <p className="text-sm text-slate-500">Branding and role-based module access — Headquarters administrators only.</p>
-      </div>
+      <PageHeader title="Settings" description="Branding and role-based module access — Headquarters administrators only." />
 
       <Card>
         <CardHeader>

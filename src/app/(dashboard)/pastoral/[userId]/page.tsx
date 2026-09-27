@@ -40,7 +40,7 @@ export default async function PastoralProfilePage({ params }: { params: Promise<
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="sticky -top-6 z-10 -mx-6 -mt-6 mb-6 flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 bg-slate-50/95 px-6 py-4 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">
         <div>
           <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{target.fullName}</h1>
           <p className="text-sm text-slate-500">
@@ -61,7 +61,7 @@ export default async function PastoralProfilePage({ params }: { params: Promise<
               }}
             />
           )}
-          {canManageUsers(session) && <ChangeRoleModal userId={target.id} currentRole={target.role} />}
+          {canManageUsers(session) && !session.isViewOnly && <ChangeRoleModal userId={target.id} currentRole={target.role} />}
         </div>
       </div>
 

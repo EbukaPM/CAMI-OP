@@ -1,29 +1,48 @@
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { canManageUsers, ForbiddenError } from "@/lib/rbac";
-import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/page-header";
+import { Pagination } from "@/components/ui/pagination";
+import { AutoSubmitSelect } from "@/components/ui/auto-submit-select";
+import { pageSkipTake } from "@/lib/pagination";
+import { Badge, Card, CardContent, CardHeader, CardTitle, Field } from "@/components/ui/primitives";
 import { formatDate } from "@/lib/utils";
 
-export default async function AuditLogPage() {
+export default async function AuditLogPage({ searchParams }: { searchParams: Promise<{ entityType?: string; page?: string }> }) {
   const session = await requireSession();
+  if (session.isViewOnly) throw new ForbiddenError("Not available while viewing a branch's portal.");
   if (!canManageUsers(session)) throw new ForbiddenError("Audit logs are restricted to Headquarters administrators.");
+  const sp = await searchParams;
 
-  const logs = await db.auditLog.findMany({
-    orderBy: { createdAt: "desc" },
-    take: 200,
-    include: { actor: { select: { fullName: true, role: true } } },
-  });
+  const [entityTypes] = await Promise.all([db.auditLog.findMany({ distinct: ["entityType"], select: { entityType: true }, orderBy: { entityType: "asc" } })]);
+  const where = sp.entityType ? { entityType: sp.entityType } : {};
+  const { page, skip, take } = pageSkipTake(sp.page, 25);
+
+  const [logs, totalCount] = await Promise.all([
+    db.auditLog.findMany({ where, orderBy: { createdAt: "desc" }, skip, take, include: { actor: { select: { fullName: true, role: true } } } }),
+    db.auditLog.count({ where }),
+  ]);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Audit Log</h1>
-        <p className="text-sm text-slate-500">Tamper-resistant record of sensitive actions across the system.</p>
+      <PageHeader title="Audit Log" description="Tamper-resistant record of sensitive actions across the system." />
+
+      <div className="w-56">
+        <Field label="Entity type">
+          <AutoSubmitSelect paramName="entityType" defaultValue={sp.entityType ?? ""}>
+            <option value="">All</option>
+            {entityTypes.map((e) => (
+              <option key={e.entityType} value={e.entityType}>
+                {e.entityType}
+              </option>
+            ))}
+          </AutoSubmitSelect>
+        </Field>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Latest 200 events</CardTitle>
+          <CardTitle>Events ({totalCount})</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto p-0">
           <table className="w-full text-sm">
@@ -58,6 +77,7 @@ export default async function AuditLogPage() {
               )}
             </tbody>
           </table>
+          <Pagination page={page} pageSize={take} totalCount={totalCount} basePath="/audit-log" searchParams={sp} />
         </CardContent>
       </Card>
     </div>

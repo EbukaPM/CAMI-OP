@@ -1,15 +1,16 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { isHqRole } from "@/lib/rbac";
+import { effectiveHq } from "@/lib/rbac";
 import { ScheduleAssignmentModal } from "./schedule-assignment-modal";
+import { PageHeader } from "@/components/ui/page-header";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/primitives";
 import { formatDate, ROLE_LABELS } from "@/lib/utils";
 import { Role } from "@prisma/client";
 
 export default async function PastoralPage() {
   const session = await requireSession();
-  const hq = isHqRole(session.role);
+  const hq = effectiveHq(session);
 
   // HQ monitors pastors and leaders church-wide; a branch's own leadership
   // monitors the leaders/workers in their branch (plus their own record).
@@ -36,13 +37,11 @@ export default async function PastoralPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Pastoral &amp; Leadership</h1>
-          <p className="text-sm text-slate-500">Pastor and leader records, career history, and preaching assignments.</p>
-        </div>
-        {hq && <ScheduleAssignmentModal pastors={pastorsForAssignment} branches={branches} />}
-      </div>
+      <PageHeader
+        title="Pastoral & Leadership"
+        description="Pastor and leader records, career history, and preaching assignments."
+        actions={hq ? <ScheduleAssignmentModal pastors={pastorsForAssignment} branches={branches} /> : undefined}
+      />
 
       <Card>
         <CardHeader>

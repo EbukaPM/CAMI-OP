@@ -4,7 +4,7 @@ import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { requireSession } from "@/lib/auth";
+import { requireWriteSession as requireSession } from "@/lib/auth";
 import { canAccessFinance, isHqRole, ForbiddenError } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
 import type { ActionState } from "@/lib/action-state";

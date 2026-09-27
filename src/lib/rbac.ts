@@ -15,6 +15,19 @@ export function isHqRole(role: Role) {
   return HQ_ROLES.includes(role);
 }
 
+/**
+ * True HQ-wide (church-wide) visibility — false while browsing a branch's
+ * portal in read-only mode, even for a General Overseer/HQ Admin/HQ
+ * Finance session, since the whole point of that mode is "see only this
+ * one branch's records, not the whole church's." Every function below that
+ * decides branch-scoped data access uses this instead of raw isHqRole so
+ * that restriction can't be bypassed by guessing another branch's URL
+ * while impersonating.
+ */
+export function effectiveHq(session: SessionPayload) {
+  return isHqRole(session.role) && !session.isViewOnly;
+}
+
 /** Can this session see consolidated, church-wide data (subject to per-module sensitivity rules)? */
 export function hasChurchWideVisibility(session: SessionPayload) {
   return isHqRole(session.role);
@@ -22,7 +35,7 @@ export function hasChurchWideVisibility(session: SessionPayload) {
 
 /** Can this session view/act on data scoped to a specific branch? */
 export function canAccessBranch(session: SessionPayload, branchId: string) {
-  if (isHqRole(session.role)) return true;
+  if (effectiveHq(session)) return true;
   return session.branchId === branchId;
 }
 
@@ -40,7 +53,8 @@ export type EquipmentValuationScope =
   | { scope: "BRANCH"; branchId: string };
 
 export function getEquipmentValuationScope(session: SessionPayload): EquipmentValuationScope | null {
-  if (session.role === Role.GENERAL_OVERSEER) return { scope: "CHURCH_WIDE" };
+  if (session.role === Role.GENERAL_OVERSEER && !session.isViewOnly) return { scope: "CHURCH_WIDE" };
+  if (session.isViewOnly && session.branchId) return { scope: "BRANCH", branchId: session.branchId };
   if (session.role === Role.BRANCH_PASTOR && session.branchId) {
     return { scope: "BRANCH", branchId: session.branchId };
   }
@@ -53,9 +67,8 @@ export function canViewEquipmentValuation(session: SessionPayload) {
 
 /** Finance record visibility mirrors branch scoping, plus HQ finance/overseer roles. */
 export function canAccessFinance(session: SessionPayload, branchId: string) {
-  if (session.role === Role.GENERAL_OVERSEER || session.role === Role.HQ_FINANCE || session.role === Role.HQ_ADMIN) {
-    return true;
-  }
+  if (effectiveHq(session)) return true;
+  if (session.isViewOnly) return session.branchId === branchId;
   if (session.role === Role.BRANCH_PASTOR || session.role === Role.FINANCE_OFFICER) {
     return session.branchId === branchId;
   }
@@ -71,6 +84,7 @@ export function canApproveRequests(session: SessionPayload) {
 }
 
 export function canManageBranch(session: SessionPayload, branchId: string) {
+  if (session.isViewOnly) return false; // read-only branch portal — no writes, ever
   if (isHqRole(session.role)) return true;
   return (
     (session.role === Role.BRANCH_PASTOR || session.role === Role.BRANCH_ADMIN) &&
@@ -83,7 +97,8 @@ export type ProfileTarget = { id: string; role: Role; branchId: string | null };
 
 /** HQ sees everyone; branch leadership can view their own branch's people; anyone can view their own profile. */
 export function canViewPastoralProfile(session: SessionPayload, target: ProfileTarget) {
-  if (isHqRole(session.role)) return true;
+  if (effectiveHq(session)) return true;
+  if (session.isViewOnly) return session.branchId === target.branchId;
   if (session.userId === target.id) return true;
   return (
     (session.role === Role.BRANCH_PASTOR || session.role === Role.BRANCH_ADMIN) &&
@@ -99,6 +114,7 @@ export function canViewPastoralProfile(session: SessionPayload, target: ProfileT
  * canEditOwnBio) and their branch's leaders/workers.
  */
 export function canManagePastoralProfile(session: SessionPayload, target: ProfileTarget) {
+  if (session.isViewOnly) return false; // read-only branch portal — no writes, ever
   if (isHqRole(session.role)) return true;
   if (target.role === Role.BRANCH_PASTOR || target.role === Role.GENERAL_OVERSEER) return false;
   return (
@@ -108,6 +124,7 @@ export function canManagePastoralProfile(session: SessionPayload, target: Profil
 
 /** Anyone can edit their own bio/qualifications, even if they can't manage their own record otherwise. */
 export function canEditOwnBio(session: SessionPayload, targetUserId: string) {
+  if (session.isViewOnly) return false;
   return session.userId === targetUserId;
 }
 

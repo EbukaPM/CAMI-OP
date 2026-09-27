@@ -1,33 +1,58 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { canManageUsers } from "@/lib/rbac";
+import { canManageUsers, ForbiddenError } from "@/lib/rbac";
 import { CreateBranchModal } from "./create-branch-modal";
-import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/page-header";
+import { Pagination } from "@/components/ui/pagination";
+import { AutoSubmitSelect } from "@/components/ui/auto-submit-select";
+import { pageSkipTake } from "@/lib/pagination";
+import { Badge, Card, CardContent, CardHeader, CardTitle, Field } from "@/components/ui/primitives";
 import { formatDate } from "@/lib/utils";
+import { Prisma } from "@prisma/client";
 
-export default async function BranchesPage() {
+const SORTS: Record<string, Prisma.BranchOrderByWithRelationInput> = {
+  name_asc: { name: "asc" },
+  name_desc: { name: "desc" },
+  newest: { createdAt: "desc" },
+  oldest: { createdAt: "asc" },
+};
+
+export default async function BranchesPage({ searchParams }: { searchParams: Promise<{ page?: string; sort?: string }> }) {
   const session = await requireSession();
+  if (session.isViewOnly) throw new ForbiddenError("Not available while viewing a branch's portal — this lists every branch.");
   const canCreate = canManageUsers(session);
+  const sp = await searchParams;
+  const { page, skip, take } = pageSkipTake(sp.page);
+  const sort = SORTS[sp.sort ?? ""] ?? SORTS.name_asc;
 
-  const branches = await db.branch.findMany({
-    orderBy: { name: "asc" },
-    include: { _count: { select: { members: true, users: true } } },
-  });
+  const [branches, totalCount] = await Promise.all([
+    db.branch.findMany({ orderBy: sort, skip, take, include: { _count: { select: { members: true, users: true } } } }),
+    db.branch.count(),
+  ]);
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Branches</h1>
-          <p className="text-sm text-slate-500">Headquarters and branch structure across the church.</p>
-        </div>
-        {canCreate && <CreateBranchModal />}
+      <PageHeader
+        title="Branches"
+        description="Headquarters and branch structure across the church."
+        actions={canCreate ? <CreateBranchModal /> : undefined}
+      />
+
+      <div className="max-w-xs">
+        <Field label="Sort by">
+          <AutoSubmitSelect paramName="sort" defaultValue={sp.sort ?? "name_asc"}>
+            <option value="name_asc">Name (A–Z)</option>
+            <option value="name_desc">Name (Z–A)</option>
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+          </AutoSubmitSelect>
+        </Field>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>All branches ({branches.length})</CardTitle>
+          <CardTitle>All branches ({totalCount})</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto p-0">
           <table className="w-full text-sm">
@@ -67,6 +92,7 @@ export default async function BranchesPage() {
               )}
             </tbody>
           </table>
+          <Pagination page={page} pageSize={take} totalCount={totalCount} basePath="/branches" searchParams={sp} />
         </CardContent>
       </Card>
     </div>

@@ -1,47 +1,52 @@
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { isHqRole, canViewEquipmentValuation, canManageBranch } from "@/lib/rbac";
+import { effectiveHq, canViewEquipmentValuation, canManageBranch } from "@/lib/rbac";
 import { getEquipmentValuation } from "@/lib/data/equipment";
 import { disposeAssetAction } from "./actions";
 import { RegisterAssetModal } from "./register-asset-modal";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, StatCard } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/page-header";
+import { Pagination } from "@/components/ui/pagination";
+import { AutoSubmitSelect } from "@/components/ui/auto-submit-select";
+import { pageSkipTake } from "@/lib/pagination";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Field, StatCard } from "@/components/ui/primitives";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Paperclip } from "lucide-react";
+import { AssetCondition } from "@prisma/client";
 
 export default async function EquipmentPage({
   searchParams,
 }: {
-  searchParams: Promise<{ branchId?: string }>;
+  searchParams: Promise<{ branchId?: string; condition?: string; page?: string }>;
 }) {
   const session = await requireSession();
-  const { branchId: filterBranchId } = await searchParams;
-  const hq = isHqRole(session.role);
-  const scopedBranchId = hq ? filterBranchId : session.branchId ?? undefined;
-  const branchWhere = scopedBranchId ? { branchId: scopedBranchId } : hq ? {} : { branchId: "__none__" };
+  const sp = await searchParams;
+  const hq = effectiveHq(session);
+  const scopedBranchId = hq ? sp.branchId : session.branchId ?? undefined;
+  const conditionFilter = sp.condition && sp.condition in AssetCondition ? (sp.condition as AssetCondition) : undefined;
+  const where = {
+    ...(scopedBranchId ? { branchId: scopedBranchId } : hq ? {} : { branchId: "__none__" }),
+    isDisposed: false,
+    ...(conditionFilter ? { condition: conditionFilter } : {}),
+  };
+  const { page, skip, take } = pageSkipTake(sp.page);
 
   const valuation = canViewEquipmentValuation(session) ? await getEquipmentValuation(session) : null;
 
-  const [branches, assets] = await Promise.all([
+  const [branches, assets, totalCount] = await Promise.all([
     hq ? db.branch.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }) : Promise.resolve([]),
-    db.asset.findMany({
-      where: { ...branchWhere, isDisposed: false },
-      orderBy: { createdAt: "desc" },
-      include: { branch: { select: { name: true } }, attachments: true },
-      take: 200,
-    }),
+    db.asset.findMany({ where, orderBy: { createdAt: "desc" }, skip, take, include: { branch: { select: { name: true } }, attachments: true } }),
+    db.asset.count({ where }),
   ]);
 
   const defaultBranchId = hq ? "" : session.branchId ?? "";
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Equipment &amp; Assets</h1>
-          <p className="text-sm text-slate-500">Register, location, custodian, and condition — by branch.</p>
-        </div>
-        <RegisterAssetModal branches={branches} defaultBranchId={defaultBranchId} />
-      </div>
+      <PageHeader
+        title="Equipment & Assets"
+        description="Register, location, custodian, and condition — by branch."
+        actions={!session.isViewOnly ? <RegisterAssetModal branches={branches} defaultBranchId={defaultBranchId} /> : undefined}
+      />
 
       {valuation ? (
         <StatCard
@@ -60,9 +65,40 @@ export default async function EquipmentPage({
         </Card>
       )}
 
+      <div className="flex flex-wrap gap-4">
+        {hq && (
+          <div className="w-56">
+            <Field label="Branch">
+              <AutoSubmitSelect paramName="branchId" defaultValue={sp.branchId ?? ""}>
+                <option value="">All branches</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </AutoSubmitSelect>
+            </Field>
+          </div>
+        )}
+        <div className="w-48">
+          <Field label="Condition">
+            <AutoSubmitSelect paramName="condition" defaultValue={sp.condition ?? ""}>
+              <option value="">All conditions</option>
+              {Object.values(AssetCondition)
+                .filter((c) => c !== "DISPOSED")
+                .map((c) => (
+                  <option key={c} value={c}>
+                    {c.replace("_", " ")}
+                  </option>
+                ))}
+            </AutoSubmitSelect>
+          </Field>
+        </div>
+      </div>
+
       <Card>
         <CardHeader>
-          <CardTitle>Assets ({assets.length})</CardTitle>
+          <CardTitle>Assets ({totalCount})</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto p-0">
           <table className="w-full text-sm">
@@ -116,12 +152,13 @@ export default async function EquipmentPage({
               {assets.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-5 py-8 text-center text-slate-500">
-                    No equipment registered yet.
+                    No equipment matches this filter.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
+          <Pagination page={page} pageSize={take} totalCount={totalCount} basePath="/equipment" searchParams={sp} />
         </CardContent>
       </Card>
     </div>

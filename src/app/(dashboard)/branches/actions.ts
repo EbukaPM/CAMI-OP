@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { requireSession } from "@/lib/auth";
+import { requireWriteSession as requireSession } from "@/lib/auth";
 import { canManageUsers, ForbiddenError } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
 import type { ActionState } from "@/lib/action-state";

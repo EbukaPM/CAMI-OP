@@ -3,31 +3,66 @@ import { db } from "@/lib/db";
 import { canManageUsers, ForbiddenError } from "@/lib/rbac";
 import { setUserActiveAction } from "./actions";
 import { CreateUserModal } from "./create-user-modal";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/page-header";
+import { Pagination } from "@/components/ui/pagination";
+import { AutoSubmitSelect } from "@/components/ui/auto-submit-select";
+import { pageSkipTake } from "@/lib/pagination";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Field } from "@/components/ui/primitives";
 import { ROLE_LABELS, formatDate } from "@/lib/utils";
+import { Role } from "@prisma/client";
 
-export default async function UsersPage() {
+export default async function UsersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ role?: string; status?: string; page?: string }>;
+}) {
   const session = await requireSession();
+  if (session.isViewOnly) throw new ForbiddenError("Not available while viewing a branch's portal.");
   if (!canManageUsers(session)) throw new ForbiddenError();
+  const sp = await searchParams;
 
-  const [users, branches] = await Promise.all([
-    db.user.findMany({ orderBy: { createdAt: "desc" }, include: { branch: { select: { name: true } } } }),
+  const roleFilter = sp.role && sp.role in Role ? (sp.role as Role) : undefined;
+  const statusFilter = sp.status === "active" ? true : sp.status === "inactive" ? false : undefined;
+  const where = { ...(roleFilter ? { role: roleFilter } : {}), ...(statusFilter !== undefined ? { isActive: statusFilter } : {}) };
+  const { page, skip, take } = pageSkipTake(sp.page);
+
+  const [users, branches, totalCount] = await Promise.all([
+    db.user.findMany({ where, orderBy: { createdAt: "desc" }, skip, take, include: { branch: { select: { name: true } } } }),
     db.branch.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    db.user.count({ where }),
   ]);
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Users &amp; Roles</h1>
-          <p className="text-sm text-slate-500">Create accounts and control role + branch scope.</p>
+      <PageHeader title="Users & Roles" description="Create accounts and control role + branch scope." actions={<CreateUserModal branches={branches} />} />
+
+      <div className="flex flex-wrap gap-4">
+        <div className="w-56">
+          <Field label="Role">
+            <AutoSubmitSelect paramName="role" defaultValue={sp.role ?? ""}>
+              <option value="">All roles</option>
+              {Object.values(Role).map((r) => (
+                <option key={r} value={r}>
+                  {ROLE_LABELS[r]}
+                </option>
+              ))}
+            </AutoSubmitSelect>
+          </Field>
         </div>
-        <CreateUserModal branches={branches} />
+        <div className="w-40">
+          <Field label="Status">
+            <AutoSubmitSelect paramName="status" defaultValue={sp.status ?? ""}>
+              <option value="">All</option>
+              <option value="active">Active</option>
+              <option value="inactive">Deactivated</option>
+            </AutoSubmitSelect>
+          </Field>
+        </div>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>All users ({users.length})</CardTitle>
+          <CardTitle>All users ({totalCount})</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto p-0">
           <table className="w-full text-sm">
@@ -67,8 +102,16 @@ export default async function UsersPage() {
                   </td>
                 </tr>
               ))}
+              {users.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-5 py-8 text-center text-slate-500">
+                    No users match these filters.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
+          <Pagination page={page} pageSize={take} totalCount={totalCount} basePath="/users" searchParams={sp} />
         </CardContent>
       </Card>
     </div>

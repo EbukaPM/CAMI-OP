@@ -3,9 +3,11 @@ import Link from "next/link";
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { canAccessFinance, isHqRole, ForbiddenError } from "@/lib/rbac";
-import { Badge, Card, CardContent, CardHeader, CardTitle, LinkButton, StatCard } from "@/components/ui/primitives";
+import { enterBranchViewAction } from "../../branch-view-actions";
+import { PageHeader } from "@/components/ui/page-header";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, LinkButton, StatCard } from "@/components/ui/primitives";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, LogIn } from "lucide-react";
 
 function monthBounds(monthParam?: string) {
   const now = new Date();
@@ -68,14 +70,24 @@ export default async function BranchDetailPage({
     byCategory.set(g.category.name, (byCategory.get(g.category.name) ?? 0) + Number(g.amount));
   }
 
+  const canEnterPortal = isHqRole(session.role) && !session.isViewOnly;
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{branch.name}</h1>
-        <p className="text-sm text-slate-500">
-          {[branch.city, branch.state].filter(Boolean).join(", ") || "—"} · {branch._count.members} members · {branch.serviceSchedule ?? "No schedule set"}
-        </p>
-      </div>
+      <PageHeader
+        title={branch.name}
+        description={`${[branch.city, branch.state].filter(Boolean).join(", ") || "—"} · ${branch._count.members} members · ${branch.serviceSchedule ?? "No schedule set"}`}
+        actions={
+          canEnterPortal ? (
+            <form action={enterBranchViewAction}>
+              <input type="hidden" name="branchId" value={id} />
+              <Button type="submit" variant="secondary">
+                <LogIn size={14} /> Enter branch portal
+              </Button>
+            </form>
+          ) : undefined
+        }
+      />
 
       {canViewFinance ? (
         <>

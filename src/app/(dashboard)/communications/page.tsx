@@ -4,12 +4,13 @@ import { canManageUsers, isHqRole } from "@/lib/rbac";
 import { generateBirthdayCampaignAction, approveSendCampaignAction } from "./actions";
 import { CreateAnnouncementModal } from "./create-announcement-modal";
 import { EditCampaignMessageModal } from "./edit-campaign-message-modal";
+import { PageHeader } from "@/components/ui/page-header";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/primitives";
 import { formatDate } from "@/lib/utils";
 
 export default async function CommunicationsPage() {
   const session = await requireSession();
-  const canManage = canManageUsers(session) || isHqRole(session.role);
+  const canManage = (canManageUsers(session) || isHqRole(session.role)) && !session.isViewOnly;
 
   const [announcements, campaigns] = await Promise.all([
     db.announcement.findMany({ orderBy: { createdAt: "desc" }, take: 20 }),
@@ -20,10 +21,7 @@ export default async function CommunicationsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Communications</h1>
-        <p className="text-sm text-slate-500">Announcements and targeted SMS/email — every send needs manual confirmation.</p>
-      </div>
+      <PageHeader title="Communications" description="Announcements and targeted SMS/email — every send needs manual confirmation." />
 
       {canManage && (
         <Card>
@@ -73,7 +71,7 @@ export default async function CommunicationsPage() {
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Announcements</h2>
-        <CreateAnnouncementModal />
+        {!session.isViewOnly && <CreateAnnouncementModal />}
       </div>
 
       <Card>

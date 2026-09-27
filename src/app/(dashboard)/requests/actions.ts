@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { Role, RequestType, RequestPriority } from "@prisma/client";
 import { db } from "@/lib/db";
-import { requireSession } from "@/lib/auth";
+import { requireWriteSession as requireSession } from "@/lib/auth";
 import { canManageBranch, isHqRole, ForbiddenError } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
 import { ESCALATION_THRESHOLD_NGN } from "@/lib/constants";

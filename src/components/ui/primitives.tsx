@@ -23,16 +23,22 @@ export function CardContent({ className, ...props }: ComponentProps<"div">) {
   return <div className={cn("px-5 py-4", className)} {...props} />;
 }
 
-export function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <Card>
-      <CardContent>
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-        <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">{value}</p>
-        {sub ? <p className="mt-1 text-xs text-slate-500">{sub}</p> : null}
-      </CardContent>
-    </Card>
+export function StatCard({ label, value, sub, href }: { label: string; value: string; sub?: string; href?: string }) {
+  const content = (
+    <CardContent>
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">{value}</p>
+      {sub ? <p className="mt-1 text-xs text-slate-500">{sub}</p> : null}
+    </CardContent>
   );
+  if (href) {
+    return (
+      <Link href={href} className="block">
+        <Card className="transition-colors hover:border-slate-300 dark:hover:border-slate-700">{content}</Card>
+      </Link>
+    );
+  }
+  return <Card>{content}</Card>;
 }
 
 const badgeColors: Record<string, string> = {
